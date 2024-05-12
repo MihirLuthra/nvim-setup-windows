@@ -60,20 +60,42 @@ vim.cmd [[
   " vim yank shouldn't copy to system clipboard
   set clipboard=
 
-  " To copy to system clipboard
-  vnoremap cp :call CopyVisualSelection()<CR>
+  " To copy to system clipboard in Visual Mode
+  vnoremap cp :<C-u>call CopyVisualSelection()<CR>
+
   function! CopyVisualSelection()
+      " Get the start and end positions of the visual selection
       let [line_start, column_start] = getpos("'<")[1:2]
       let [line_end, column_end] = getpos("'>")[1:2]
       let lines = getline(line_start, line_end)
+
       if len(lines) == 0
           return
       endif
+      " Adjust the first and last lines based on the selection
       let lines[0] = lines[0][column_start - 1:]
-      let lines[-1] = lines[-1][:column_end - 1]
-      let text = join(lines, "\n")
-      call system('echo -n ' . shellescape(text) . ' | xclip -selection clipboard')
+      if line_start == line_end
+          let lines[0] = lines[0][:column_end - column_start]
+      else
+          let lines[-1] = lines[-1][:column_end - 1]
+      endif
+      let text = join(lines, "###EOL###")
+      let tempfile = tempname()
+      " Write the selected text to the tempfile
+      call writefile([text], tempfile, 'b')
+      " Log the tempfile path and content for debugging
+      echom 'Copied to clipboard'
+
+      let replace_eol_with_newline = 'powershell -NoProfile -Command "(Get-Content -Path ''' . escape(tempfile, '\') . ''' ) -replace ''###EOL###'', \"`n\" | Set-Content ''' . escape(tempfile, '\') . '''"'
+      call system(replace_eol_with_newline)
+      " Use PowerShell to read the tempfile and set the clipboard
+      let powershell_cmd = 'powershell -NoProfile -Command "Get-Content -Path ''' . shellescape(tempfile) . ''' | Set-Clipboard"'
+      call system(powershell_cmd)
+      " Comment out the next line to prevent deletion of the tempfile
+      call delete(tempfile)
   endfunction
-  nnoremap cp$ :call system('xclip -selection clipboard', getline('.')[col('.') - 1:])<CR>
+
+  " To copy to system clipboard in Normal Mode (copies from current cursor position to end of line)
+  nnoremap cp$ :call system('clip', getline('.')[col('.') - 1:])<CR>
 
 ]]
